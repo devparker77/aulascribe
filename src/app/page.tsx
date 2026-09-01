@@ -195,6 +195,7 @@ export default function Home() {
               onTranscriptionSuccess={handleTranscriptionSuccess}
               apiKey={apiKey}
               selectedModel={selectedModel}
+              onOpenSettings={() => setIsSettingsOpen(true)}
             />
           </div>
         )}

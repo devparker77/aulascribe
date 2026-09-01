@@ -8,9 +8,10 @@ interface AudioUploaderProps {
   onTranscriptionSuccess: (data: TranscriptionResponse, audioBlob: Blob | undefined, durationSeconds: number) => void;
   apiKey?: string;
   selectedModel?: string;
+  onOpenSettings?: () => void;
 }
 
-export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel }: AudioUploaderProps) {
+export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel, onOpenSettings }: AudioUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [subject, setSubject] = useState('');
@@ -404,9 +405,20 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel }:
 
             {/* Mensagem de Erro se houver */}
             {errorMsg && (
-              <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs flex items-start gap-2 animate-shake">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{errorMsg}</span>
+              <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 animate-shake">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{errorMsg}</span>
+                </div>
+                {onOpenSettings && errorMsg.toLowerCase().includes('chave') && (
+                  <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    className="self-end sm:self-auto px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] whitespace-nowrap active:scale-95 transition-all shadow-xs"
+                  >
+                    Inserir Chave Agora ⚙️
+                  </button>
+                )}
               </div>
             )}
 
