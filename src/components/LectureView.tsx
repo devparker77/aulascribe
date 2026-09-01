@@ -15,10 +15,12 @@ import {
   Check,
   Copy,
   Layers,
-  FileDown
+  FileDown,
+  ListTree
 } from 'lucide-react';
 import { TranscriptViewer } from './TranscriptViewer';
 import { StudyNotesTab } from './StudyNotesTab';
+import { BulletSummaryTab } from './BulletSummaryTab';
 import { AudioPlayer } from './AudioPlayer';
 import { exportLectureToPdf, exportLectureToText } from '@/lib/pdf-export';
 
@@ -37,7 +39,7 @@ export function LectureView({
   onUpdateFlashcardMastery,
   apiKey,
 }: LectureViewProps) {
-  const [activeMainTab, setActiveMainTab] = useState<'study' | 'transcript'>('study');
+  const [activeMainTab, setActiveMainTab] = useState<'study' | 'bullet_summary' | 'transcript'>('study');
   const [seekTime, setSeekTime] = useState<number | undefined>(undefined);
   const [copiedText, setCopiedText] = useState(false);
 
@@ -158,41 +160,64 @@ export function LectureView({
         </div>
       </div>
 
-      {/* Seletor de Abas Principais (Modo Estudo vs Transcrição) */}
-      <div className="flex items-center p-1 bg-slate-200/80 dark:bg-slate-800/80 rounded-2xl border border-slate-300/60 dark:border-slate-700">
+      {/* Seletor de 3 Abas Principais */}
+      <div className="flex items-center p-1 bg-slate-200/80 dark:bg-slate-800/80 rounded-2xl border border-slate-300/60 dark:border-slate-700 gap-1">
+        {/* Aba 1: Modo Estudo & IA */}
         <button
           onClick={() => setActiveMainTab('study')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.99] ${
+          className={`flex-1 py-3 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.99] ${
             activeMainTab === 'study'
               ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-md'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          <Sparkles className="w-4 h-4 text-blue-500" />
-          <span>Modo Estudo & Resumos</span>
+          <Sparkles className="w-4 h-4 text-blue-500 shrink-0" />
+          <span className="truncate">Modo Estudo & IA</span>
         </button>
 
+        {/* Aba 2: Resumo Completo (Bullet Points) */}
+        <button
+          onClick={() => setActiveMainTab('bullet_summary')}
+          className={`flex-1 py-3 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.99] ${
+            activeMainTab === 'bullet_summary'
+              ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-md'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <ListTree className="w-4 h-4 text-blue-500 shrink-0" />
+          <span className="truncate">Resumo Completo</span>
+        </button>
+
+        {/* Aba 3: Transcrição Completa */}
         <button
           onClick={() => setActiveMainTab('transcript')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.99] ${
+          className={`flex-1 py-3 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.99] ${
             activeMainTab === 'transcript'
               ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-md'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          <FileText className="w-4 h-4" />
-          <span>Transcrição Completa (Timestamps)</span>
+          <FileText className="w-4 h-4 shrink-0" />
+          <span className="truncate">Transcrição Completa</span>
         </button>
       </div>
 
       {/* Conteúdo da Aba Ativa */}
-      {activeMainTab === 'study' ? (
+      {activeMainTab === 'study' && (
         <StudyNotesTab
           lecture={lecture}
           onUpdateFlashcardMastery={onUpdateFlashcardMastery}
           apiKey={apiKey}
         />
-      ) : (
+      )}
+
+      {activeMainTab === 'bullet_summary' && (
+        <BulletSummaryTab
+          lecture={lecture}
+        />
+      )}
+
+      {activeMainTab === 'transcript' && (
         <TranscriptViewer
           segments={lecture.segments || []}
           onSeek={handleSeek}

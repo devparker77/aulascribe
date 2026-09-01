@@ -96,6 +96,7 @@ export default function Home() {
         text: s.text || '',
       })) || [],
       summary: data.summary || 'Resumo não disponível.',
+      bulletSummary: data.bulletSummary || '',
       keyTopics: data.keyTopics || [],
       examAlerts: data.examAlerts || [],
       flashcards: data.flashcards?.map((f, idx) => ({

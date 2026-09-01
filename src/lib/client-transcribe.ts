@@ -2,7 +2,7 @@ import { TranscriptionResponse, TranscriptSegment } from '@/types/lecture';
 
 export const ACADEMIC_PROMPT = `
 Você é um assistente acadêmico de elite e especialista em pedagogia universitária no Brasil.
-Sua missão é analisar o texto transcrito de uma aula universitária/faculdade e estruturar um material de estudos completo, de alta fidelidade didática em Português Brasileiro (PT-BR).
+Sua missão é analisar o texto transcrito de uma aula universitária/faculdade e estruturar um material de estudos completo, didático e altamente detalhado em Português Brasileiro (PT-BR).
 
 INSTRUÇÕES OBRIGATÓRIAS:
 1. TÍTULO E DISCIPLINA:
@@ -11,20 +11,38 @@ INSTRUÇÕES OBRIGATÓRIAS:
 2. RESUMO EXECUTIVO DIDÁTICO:
    - Crie uma síntese clara dos principais pontos ensinados na aula, organizada em tópicos compreensíveis e objetivos.
 
-3. TÓPICOS-CHAVE & QUADRO DE CONCEITOS:
-   - Destaque os temas centrais abordados, com explicações detalhadas e exemplos práticos citados pelo professor.
-   - Indique o nível de importância de cada tópico ('alta', 'media', 'baixa').
+3. RESUMO COMPLETO EM BULLET POINTS (ORDEM CRONOLÓGICA DA NARRATIVA DA AULA):
+   - Este é o coração do estudo: crie um resumo minucioso e aprofundado seguindo RIGOROSAMENTE a ordem cronológica em que o professor falou na aula.
+   - Estruture em tópicos e subtópicos numerados com marcadores de tópicos (-), com riqueza de detalhes, incluindo cada argumento, explicação, citação de artigo/lei/fórmula, distinções teóricas e exemplos dados pelo professor:
+   
+   Exemplo de formato para o campo "bulletSummary":
+   "### 1. [00:00] Introdução e Contextualização do Tema
+   - O professor iniciou a aula contextualizando a importância histórica do tema...
+   - Definição do conceito central: X é caracterizado por Y e Z.
+   - Exemplo dado em sala: caso concreto ilustrando a aplicação prática.
+   
+   ### 2. [12:45] Desenvolvimento dos Elementos Fundamentais
+   - Primeiro requisito essencial apresentado pelo professor...
+   - Diferenciação detalhada entre o instituto A e o instituto B.
+   - Ponto de atenção reforçado: a exceção que costuma gerar dúvidas.
+   
+   ### 3. [28:30] Aplicações Práticas e Conclusões da Aula
+   - Discussão sobre jurisprudência/doutrina/fórmulas aplicáveis.
+   - Síntese dos desfechos e reflexões finais do professor."
 
-4. ALERTAS DE PROVA & CONCEITOS CRÍTICOS:
+4. TÓPICOS-CHAVE & QUADRO DE CONCEITOS:
+   - Destaque os temas centrais abordados, com explicações didáticas e nível de importância ('alta', 'media', 'baixa').
+
+5. ALERTAS DE PROVA & CONCEITOS CRÍTICOS:
    - Identifique e liste tudo que o professor deu ênfase especial, repetiu, disse que "vai cair na prova", "é pegadinha de exame", ou conceitos essenciais.
 
-5. FLASHCARDS DE REVISÃO RÁPIDA:
+6. FLASHCARDS DE REVISÃO RÁPIDA:
    - Crie de 5 a 10 flashcards (Pergunta instigante e Resposta direta e completa) cobrindo os conceitos vitais da aula.
 
-6. SIMULADO DE QUESTÕES (QUIZ):
+7. SIMULADO DE QUESTÕES (QUIZ):
    - Crie de 3 a 6 questões de múltipla escolha baseadas exatamente no conteúdo da aula, com 4 alternativas, índice da alternativa correta (0 a 3) e uma explicação detalhada do porquê.
 
-7. GLOSSÁRIO DE TERMOS TÉCNICOS:
+8. GLOSSÁRIO DE TERMOS TÉCNICOS:
    - Mapeie palavras difíceis, siglas, nomes de teorias, leis ou conceitos introduzidos na aula com suas definições claras.
 
 FORMATO DE RESPOSTA OBRIGATÓRIO (JSON PURO):
@@ -33,7 +51,8 @@ Estrutura:
 {
   "title": "Título da Aula",
   "subject": "Nome da Matéria/Disciplina",
-  "summary": "Resumo estruturado da aula...",
+  "summary": "Resumo executivo sintético...",
+  "bulletSummary": "### 1. [00:00] Título do Tópico 1\\n- Item detalhado 1...\\n- Item detalhado 2...\\n\\n### 2. [15:00] Título do Tópico 2\\n- Item detalhado 1...\\n- Item detalhado 2...",
   "keyTopics": [
     {
       "title": "Nome do Tópico",
@@ -128,7 +147,6 @@ async function splitAudioIntoWavChunks(
 
   const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioCtx) {
-    // Fallback caso navegador antigo não suporte Web Audio
     return [{ blob: file, startSecond: 0, durationSeconds: 0 }];
   }
 
@@ -139,7 +157,6 @@ async function splitAudioIntoWavChunks(
   const targetSampleRate = 16000;
   const numChannels = audioBuffer.numberOfChannels;
   const originalSampleRate = audioBuffer.sampleRate;
-  const totalDuration = audioBuffer.duration;
 
   // 1. Mistura canais para Mono
   const monoSamples = new Float32Array(audioBuffer.length);
@@ -195,7 +212,7 @@ async function splitAudioIntoWavChunks(
 }
 
 /**
- * Transcrição e Geração de Estudos com Groq Whisper Large v3 + Groq LLM (Suporte a gravações de qualquer tamanho)
+ * Transcrição e Geração de Estudos com Groq Whisper Large v3 + Groq LLM
  */
 export async function transcribeWithGroq(
   file: File,
@@ -278,7 +295,7 @@ export async function transcribeWithGroq(
     });
   }
 
-  onProgress?.(3, 'Gerando resumo executivo, flashcards 3D e simulado com IA...');
+  onProgress?.(3, 'Gerando resumo completo cronológico, flashcards e simulado...');
 
   // Estruturação didática com LLM em ~2 segundos
   const prompt = `${ACADEMIC_PROMPT}\n\nDisciplina sugerida: "${subject || 'Geral'}".\n\nTRANSCRIÇÃO COMPLETA DA AULA:\n"""\n${completeTranscript.substring(0, 60000)}\n"""`;

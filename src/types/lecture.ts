@@ -45,6 +45,7 @@ export interface Lecture {
   rawTranscription: string;
   segments: TranscriptSegment[];
   summary: string;
+  bulletSummary?: string; // Resumo completo cronológico em tópicos e bullet points
   keyTopics: KeyTopic[];
   examAlerts: string[];
   flashcards: Flashcard[];
@@ -60,6 +61,7 @@ export interface TranscriptionResponse {
   title: string;
   subject: string;
   summary: string;
+  bulletSummary?: string;
   segments: {
     time: string;
     speaker: string;

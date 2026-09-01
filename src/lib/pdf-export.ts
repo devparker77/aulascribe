@@ -224,8 +224,12 @@ export function exportLectureToText(lecture: Lecture): string {
 
   text += `## 1. Resumo Executivo\n${lecture.summary}\n\n`;
 
+  if (lecture.bulletSummary && lecture.bulletSummary.trim()) {
+    text += `## 2. Resumo Completo (Ordem Cronológica da Aula)\n${lecture.bulletSummary}\n\n`;
+  }
+
   if (lecture.examAlerts && lecture.examAlerts.length > 0) {
-    text += `## 2. Alertas de Prova\n`;
+    text += `## 3. Alertas de Prova\n`;
     lecture.examAlerts.forEach((a, i) => {
       text += `- ⚠️ ${a}\n`;
     });
