@@ -101,12 +101,11 @@ export async function processAudioWithGemini(
   audioBuffer: Buffer,
   mimeType: string,
   customApiKey?: string,
-  modelName: string = 'gemini-3.7-flash'
+  modelName: string = 'gemini-3.6-flash'
 ): Promise<TranscriptionResponse> {
   const ai = getGeminiClient(customApiKey);
   
   // Cria arquivo temporário para upload via Files API do Gemini
-  // Suporta desde áudios curtos até aulas gravadas de 3 a 5 horas
   const tempDir = os.tmpdir();
   const ext = mimeType.includes('mp4') || mimeType.includes('m4a') ? '.m4a' :
               mimeType.includes('mpeg') || mimeType.includes('mp3') ? '.mp3' :
@@ -129,27 +128,54 @@ export async function processAudioWithGemini(
       },
     });
 
-    console.log(`[Gemini 3.7 Flash] Áudio enviado com sucesso. ID do arquivo: ${uploadedFile.name}`);
+    console.log(`[Gemini] Áudio enviado com sucesso para Google Files API. ID: ${uploadedFile.name}`);
 
-    // Executa a transcrição e geração com Gemini 3.7 Flash
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: [
-        {
-          fileData: {
-            fileUri: uploadedFile.uri || '',
-            mimeType: uploadedFile.mimeType || mimeType,
+    // Modelos ativos suportados com fallback
+    const candidateModels = [
+      'gemini-3.6-flash',
+      'gemini-3.7-flash',
+      modelName
+    ].filter((v, i, a) => a.indexOf(v) === i);
+
+    let lastError: any = null;
+    let responseText = '';
+
+    for (const currentModel of candidateModels) {
+      try {
+        console.log(`[Gemini] Processando com modelo: ${currentModel}...`);
+        const response = await ai.models.generateContent({
+          model: currentModel,
+          contents: [
+            {
+              fileData: {
+                fileUri: uploadedFile.uri || '',
+                mimeType: uploadedFile.mimeType || mimeType,
+              },
+            },
+            ACADEMIC_PROMPT,
+          ],
+          config: {
+            temperature: 0.2,
+            responseMimeType: 'application/json',
           },
-        },
-        ACADEMIC_PROMPT,
-      ],
-      config: {
-        temperature: 0.2, // Baixa temperatura para fidelidade máxima na transcrição
-        responseMimeType: 'application/json',
-      },
-    });
+        });
 
-    const responseText = response.text || '';
+        responseText = response.text || '';
+        if (responseText) {
+          console.log(`[Gemini] Processamento concluído com sucesso via ${currentModel}!`);
+          break;
+        }
+      } catch (modelErr: any) {
+        console.warn(`[Gemini] Modelo ${currentModel} falhou (${modelErr.message}). Tentando fallback...`);
+        lastError = modelErr;
+        // Pequena pausa antes de tentar o próximo se for 503
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+
+    if (!responseText) {
+      throw lastError || new Error('Nenhum dos modelos disponíveis respondeu no momento.');
+    }
     
     // Tratamento para extrair JSON caso haja marcação ```json
     let cleanJson = responseText.trim();
@@ -162,17 +188,17 @@ export async function processAudioWithGemini(
     const parsed: TranscriptionResponse = JSON.parse(cleanJson);
     return parsed;
   } catch (error: any) {
-    console.error('[Gemini 3.7 Flash] Erro no processamento do áudio:', error);
-    throw new Error(error.message || 'Falha ao processar e transcrever a gravação da aula com o Gemini.');
+    console.error('[Gemini] Erro final no processamento do áudio:', error);
+    throw new Error(error.message || 'Falha ao processar e transcrever a gravação da aula.');
   } finally {
     // Limpeza de arquivos temporários locais
     try {
       await fs.unlink(tempFilePath);
     } catch {
-      // Ignora se já tiver sido removido
+      // Ignora
     }
     
-    // Limpeza na nuvem (Google Files API) para não consumir cota de armazenamento
+    // Limpeza na nuvem (Google Files API)
     if (uploadedFile?.name) {
       try {
         await ai.files.delete({ name: uploadedFile.name });
