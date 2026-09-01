@@ -99,7 +99,7 @@ export async function fileToBase64(file: File): Promise<string> {
 export async function transcribeDirectlyWithGemini(
   file: File,
   apiKey: string,
-  modelName: string = 'gemini-3.6-flash',
+  modelName: string = 'gemini-3.7-flash',
   subject?: string,
   onProgress?: (step: number, msg: string) => void
 ): Promise<TranscriptionResponse> {
@@ -107,72 +107,89 @@ export async function transcribeDirectlyWithGemini(
     throw new Error('Chave de API do Gemini não informada.');
   }
 
-  onProgress?.(0, 'Convertendo áudio para processamento seguro...');
+  onProgress?.(0, 'Preparando áudio da aula...');
   const base64Data = await fileToBase64(file);
   const mimeType = file.type || (file.name.endsWith('.m4a') ? 'audio/mp4' : 'audio/mp3');
 
   const candidateModels = [
-    'gemini-3.6-flash',
+    modelName,
     'gemini-3.7-flash',
-    modelName
+    'gemini-3.6-flash'
   ].filter((v, i, a) => a.indexOf(v) === i);
 
   let responseData: any = null;
   let lastError: any = null;
 
-  for (let i = 0; i < candidateModels.length; i++) {
-    const currentModel = candidateModels[i];
-    onProgress?.(1, `Enviando áudio diretamente ao Gemini (${currentModel})...`);
+  for (const currentModel of candidateModels) {
+    // Tenta até 3 vezes por modelo em caso de pico momentâneo (503)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      onProgress?.(
+        1,
+        attempt > 1
+          ? `Aguardando liberação de cota no Gemini (${currentModel}, tentativa ${attempt}/3)...`
+          : `Processando áudio com Gemini (${currentModel})...`
+      );
 
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`;
-      
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: mimeType,
-                    data: base64Data,
-                  },
-                },
-                {
-                  text: subject ? `${ACADEMIC_PROMPT}\n\nObservação da Estudante: A matéria desta aula é "${subject}".` : ACADEMIC_PROMPT,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            responseMimeType: 'application/json',
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`;
+        
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           },
-        }),
-      });
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: mimeType,
+                      data: base64Data,
+                    },
+                  },
+                  {
+                    text: subject ? `${ACADEMIC_PROMPT}\n\nObservação da Estudante: A matéria desta aula é "${subject}".` : ACADEMIC_PROMPT,
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.2,
+              responseMimeType: 'application/json',
+            },
+          }),
+        });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `Erro HTTP ${res.status}`);
-      }
+        if (res.status === 503 || res.status === 429) {
+          console.warn(`[Gemini] ${currentModel} com pico de demanda (503/429). Aguardando ${attempt * 2}s...`);
+          await new Promise((r) => setTimeout(r, attempt * 2000));
+          continue;
+        }
 
-      responseData = await res.json();
-      if (responseData?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        break;
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.error?.message || `Erro HTTP ${res.status}`);
+        }
+
+        responseData = await res.json();
+        if (responseData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+          break;
+        }
+      } catch (err: any) {
+        console.warn(`Tentativa ${attempt} com ${currentModel} falhou:`, err.message);
+        lastError = err;
+        await new Promise((r) => setTimeout(r, 1500));
       }
-    } catch (err: any) {
-      console.warn(`Tentativa com ${currentModel} falhou:`, err.message);
-      lastError = err;
-      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    if (responseData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      break;
     }
   }
 
   if (!responseData?.candidates?.[0]?.content?.parts?.[0]?.text) {
-    throw lastError || new Error('Falha ao obter resposta do Gemini.');
+    throw lastError || new Error('O Gemini está temporariamente sobrecarregado no momento. Por favor, aguarde alguns segundos e clique novamente.');
   }
 
   onProgress?.(3, 'Sintetizando resumo, tópicos de prova e flashcards...');
@@ -186,6 +203,6 @@ export async function transcribeDirectlyWithGemini(
   }
 
   const parsed: TranscriptionResponse = JSON.parse(cleanJson);
-  onProgress?.(4, 'Concluído!');
+  onProgress?.(4, 'Pronto! Dossiê de estudos gerado.');
   return parsed;
 }
