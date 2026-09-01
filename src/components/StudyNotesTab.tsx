@@ -33,7 +33,22 @@ export function StudyNotesTab({ lecture, onUpdateFlashcardMastery, apiKey }: Stu
   // Flashcards state
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [localFlashcards, setLocalFlashcards] = useState<Flashcard[]>(lecture.flashcards || []);
+  const getInitialFlashcards = (): Flashcard[] => {
+    if (lecture.flashcards && lecture.flashcards.length > 0) {
+      return lecture.flashcards;
+    }
+    if (lecture.keyTopics && lecture.keyTopics.length > 0) {
+      return lecture.keyTopics.map((t, idx) => ({
+        id: `fc_fallback_${idx}`,
+        question: `O que é e como funciona "${t.title}" segundo a aula?`,
+        answer: t.explanation,
+        mastered: false,
+      }));
+    }
+    return [];
+  };
+
+  const [localFlashcards, setLocalFlashcards] = useState<Flashcard[]>(getInitialFlashcards());
 
   // Quiz state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});

@@ -4,55 +4,39 @@ export const ACADEMIC_PROMPT = `
 Você é um assistente acadêmico de elite e especialista em pedagogia universitária no Brasil.
 Sua missão é analisar o texto transcrito de uma aula universitária/faculdade e estruturar um material de estudos completo, didático e altamente detalhado em Português Brasileiro (PT-BR).
 
-INSTRUÇÕES OBRIGATÓRIAS:
+INSTRUÇÕES OBRIGATÓRIAS (TODAS AS SEÇÕES SÃO OBRIGATÓRIAS):
 1. TÍTULO E DISCIPLINA:
    - Identifique um título claro e a matéria da aula.
 
 2. RESUMO EXECUTIVO DIDÁTICO:
-   - Crie uma síntese clara dos principais pontos ensinados na aula, organizada em tópicos compreensíveis e objetivos.
+   - Crie uma síntese clara dos principais pontos ensinados na aula.
 
 3. RESUMO COMPLETO EM BULLET POINTS (ORDEM CRONOLÓGICA DA NARRATIVA DA AULA):
-   - Este é o coração do estudo: crie um resumo minucioso e aprofundado seguindo RIGOROSAMENTE a ordem cronológica em que o professor falou na aula.
-   - Estruture em tópicos e subtópicos numerados com marcadores de tópicos (-), com riqueza de detalhes, incluindo cada argumento, explicação, citação de artigo/lei/fórmula, distinções teóricas e exemplos dados pelo professor:
-   
-   Exemplo de formato para o campo "bulletSummary":
-   "### 1. [00:00] Introdução e Contextualização do Tema
-   - O professor iniciou a aula contextualizando a importância histórica do tema...
-   - Definição do conceito central: X é caracterizado por Y e Z.
-   - Exemplo dado em sala: caso concreto ilustrando a aplicação prática.
-   
-   ### 2. [12:45] Desenvolvimento dos Elementos Fundamentais
-   - Primeiro requisito essencial apresentado pelo professor...
-   - Diferenciação detalhada entre o instituto A e o instituto B.
-   - Ponto de atenção reforçado: a exceção que costuma gerar dúvidas.
-   
-   ### 3. [28:30] Aplicações Práticas e Conclusões da Aula
-   - Discussão sobre jurisprudência/doutrina/fórmulas aplicáveis.
-   - Síntese dos desfechos e reflexões finais do professor."
+   - Crie um resumo minucioso e aprofundado seguindo RIGOROSAMENTE a ordem cronológica em que o professor falou na aula.
+   - Estruture em tópicos numerados com marcadores de tópicos (-), com riqueza de detalhes, explicando conceitos, distinções e exemplos do professor.
 
 4. TÓPICOS-CHAVE & QUADRO DE CONCEITOS:
-   - Destaque os temas centrais abordados, com explicações didáticas e nível de importância ('alta', 'media', 'baixa').
+   - Destaque os temas centrais abordados, com explicações completas e nível de importância ('alta', 'media', 'baixa').
 
-5. ALERTAS DE PROVA & CONCEITOS CRÍTICOS:
-   - Identifique e liste tudo que o professor deu ênfase especial, repetiu, disse que "vai cair na prova", "é pegadinha de exame", ou conceitos essenciais.
+5. ALERTAS DE PROVA & PONTOS CRÍTICOS:
+   - Identifique e liste tudo que o professor deu ênfase especial, repetiu ou disse que vai cair em prova.
 
-6. FLASHCARDS DE REVISÃO RÁPIDA:
-   - Crie de 5 a 10 flashcards (Pergunta instigante e Resposta direta e completa) cobrindo os conceitos vitais da aula.
+6. FLASHCARDS DE REVISÃO RÁPIDA (OBRIGATÓRIO GERAR DE 6 A 12 CARDS):
+   - Crie obrigatoriamente de 6 a 12 flashcards ({ "question": "Pergunta objetiva e instigante?", "answer": "Resposta completa e didática." }) cobrindo os conceitos essenciais da aula.
 
-7. SIMULADO DE QUESTÕES (QUIZ):
-   - Crie de 3 a 6 questões de múltipla escolha baseadas exatamente no conteúdo da aula, com 4 alternativas, índice da alternativa correta (0 a 3) e uma explicação detalhada do porquê.
+7. SIMULADO DE QUESTÕES (QUIZ - OBRIGATÓRIO GERAR DE 3 A 6 QUESTÕES):
+   - Crie questões de múltipla escolha com 4 alternativas, índice da correta (0 a 3) e justificativa.
 
 8. GLOSSÁRIO DE TERMOS TÉCNICOS:
-   - Mapeie palavras difíceis, siglas, nomes de teorias, leis ou conceitos introduzidos na aula com suas definições claras.
+   - Mapeie palavras difíceis, siglas e conceitos com suas definições claras.
 
 FORMATO DE RESPOSTA OBRIGATÓRIO (JSON PURO):
-Você DEVE responder ESTRITAMENTE em formato JSON válido, sem qualquer texto introdutório antes ou depois.
-Estrutura:
+Responda ESTRITAMENTE em formato JSON válido:
 {
   "title": "Título da Aula",
   "subject": "Nome da Matéria/Disciplina",
-  "summary": "Resumo executivo sintético...",
-  "bulletSummary": "### 1. [00:00] Título do Tópico 1\\n- Item detalhado 1...\\n- Item detalhado 2...\\n\\n### 2. [15:00] Título do Tópico 2\\n- Item detalhado 1...\\n- Item detalhado 2...",
+  "summary": "Resumo executivo...",
+  "bulletSummary": "### 1. [00:00] Título do Tópico 1\\n- Ponto 1...\\n- Ponto 2...\\n\\n### 2. [15:00] Título do Tópico 2\\n- Ponto 1...",
   "keyTopics": [
     {
       "title": "Nome do Tópico",
@@ -65,16 +49,20 @@ Estrutura:
   ],
   "flashcards": [
     {
-      "question": "Pergunta...",
-      "answer": "Resposta..."
+      "question": "Pergunta de revisão 1?",
+      "answer": "Resposta explicativa 1."
+    },
+    {
+      "question": "Pergunta de revisão 2?",
+      "answer": "Resposta explicativa 2."
     }
   ],
   "quiz": [
     {
-      "question": "Enunciado...",
+      "question": "Enunciado da questão...",
       "options": ["A", "B", "C", "D"],
       "correctIndex": 0,
-      "explanation": "Justificativa..."
+      "explanation": "Justificativa da alternativa correta."
     }
   ],
   "glossary": [
@@ -88,13 +76,10 @@ Estrutura:
 
 function formatSecondsToTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
+  const secs = seconds % 60;
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-/**
- * Converte Float32Array para formato WAV padrão (16-bit PCM Mono)
- */
 function encodeWav(samples: Float32Array, sampleRate = 16000): Blob {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
   const view = new DataView(buffer);
@@ -105,26 +90,22 @@ function encodeWav(samples: Float32Array, sampleRate = 16000): Blob {
     }
   }
 
-  // Header RIFF
   writeString(0, 'RIFF');
   view.setUint32(4, 36 + samples.length * 2, true);
   writeString(8, 'WAVE');
 
-  // Sub-chunk FMT (16-bit Mono PCM)
   writeString(12, 'fmt ');
   view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // Linear PCM
-  view.setUint16(22, 1, true); // 1 Canal (Mono)
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true); // Byte rate (16000 * 2)
-  view.setUint16(32, 2, true); // Block align
-  view.setUint16(34, 16, true); // Bits per sample
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
 
-  // Sub-chunk DATA
   writeString(36, 'data');
   view.setUint32(40, samples.length * 2, true);
 
-  // Amostras PCM
   let offset = 44;
   for (let i = 0; i < samples.length; i++, offset += 2) {
     const s = Math.max(-1, Math.min(1, samples[i]));
@@ -134,10 +115,6 @@ function encodeWav(samples: Float32Array, sampleRate = 16000): Blob {
   return new Blob([buffer], { type: 'audio/wav' });
 }
 
-/**
- * Decodifica qualquer arquivo de áudio (.mp3, .m4a, .wav) no navegador,
- * converte para 16kHz Mono e divide em chunks seguros de 10 minutos (<=19MB).
- */
 async function splitAudioIntoWavChunks(
   file: File,
   maxChunkMinutes = 10,
@@ -158,7 +135,6 @@ async function splitAudioIntoWavChunks(
   const numChannels = audioBuffer.numberOfChannels;
   const originalSampleRate = audioBuffer.sampleRate;
 
-  // 1. Mistura canais para Mono
   const monoSamples = new Float32Array(audioBuffer.length);
   for (let c = 0; c < numChannels; c++) {
     const channelData = audioBuffer.getChannelData(c);
@@ -167,7 +143,6 @@ async function splitAudioIntoWavChunks(
     }
   }
 
-  // 2. Reamostragem para 16,000 Hz
   let resampledSamples: Float32Array;
   if (originalSampleRate === targetSampleRate) {
     resampledSamples = monoSamples;
@@ -181,10 +156,8 @@ async function splitAudioIntoWavChunks(
     }
   }
 
-  // 3. Fatiamento em partes de até maxChunkMinutes (10 minutos = 9.600.000 amostras = 19.2MB)
   const samplesPerChunk = targetSampleRate * 60 * maxChunkMinutes;
   const chunks: { blob: Blob; startSecond: number; durationSeconds: number }[] = [];
-
   const totalChunks = Math.ceil(resampledSamples.length / samplesPerChunk);
 
   for (let c = 0; c < totalChunks; c++) {
@@ -205,10 +178,91 @@ async function splitAudioIntoWavChunks(
   try {
     await audioCtx.close();
   } catch (e) {
-    // Ignora erro ao fechar contexto
+    // ignore
   }
 
   return chunks;
+}
+
+/**
+ * Normaliza e garante que todos os campos e arrays (flashcards, quiz, tópicos) estejam preenchidos
+ */
+function normalizeStudyKit(raw: any, allSegments: any[]): TranscriptionResponse {
+  const title = raw.title || raw.titulo || 'Aula Universitária';
+  const subject = raw.subject || raw.disciplina || raw.materia || 'Geral';
+  const summary = raw.summary || raw.resumo || 'Resumo da aula processado.';
+  const bulletSummary = raw.bulletSummary || raw.bullet_summary || raw.resumo_completo || '';
+
+  // 1. Tópicos Chave
+  const rawTopics = raw.keyTopics || raw.key_topics || raw.topicos || raw.topics || [];
+  const keyTopics = rawTopics.map((t: any) => ({
+    title: t.title || t.titulo || t.nome || 'Tópico',
+    explanation: t.explanation || t.explicacao || t.descricao || '',
+    importance: t.importance || t.importancia || 'alta',
+  }));
+
+  // 2. Alertas de Prova
+  const examAlerts = (raw.examAlerts || raw.exam_alerts || raw.alertas || raw.alerts || []).map((a: any) =>
+    typeof a === 'string' ? a : a.text || a.alerta || JSON.stringify(a)
+  );
+
+  // 3. Flashcards (com fallback inteligente automático se vier vazio)
+  const rawCards = raw.flashcards || raw.flash_cards || raw.cards || raw.cartoes || raw.flashCards || [];
+  let flashcards = rawCards.map((c: any) => ({
+    question: (c.question || c.pergunta || c.front || c.q || c.p || '').trim(),
+    answer: (c.answer || c.resposta || c.back || c.a || c.r || '').trim(),
+  })).filter((c: any) => c.question.length > 0 && c.answer.length > 0);
+
+  // Fallback: se o LLM não gerou flashcards suficientes, gera automaticamente a partir dos tópicos e alertas
+  if (flashcards.length === 0) {
+    if (keyTopics.length > 0) {
+      keyTopics.forEach((t: any) => {
+        flashcards.push({
+          question: `O que é ou como funciona o conceito de "${t.title}" segundo a aula?`,
+          answer: t.explanation,
+        });
+      });
+    }
+    if (examAlerts.length > 0) {
+      examAlerts.forEach((alert: string, i: number) => {
+        flashcards.push({
+          question: `Qual é o ponto crítico / alerta de prova destacado pelo professor (${i + 1})?`,
+          answer: alert,
+        });
+      });
+    }
+  }
+
+  // 4. Simulado (Quiz)
+  const rawQuiz = raw.quiz || raw.questions || raw.simulado || raw.questoes || [];
+  const quiz = rawQuiz.map((q: any) => ({
+    question: q.question || q.pergunta || q.enunciado || 'Questão de revisão',
+    options: Array.isArray(q.options || q.alternativas || q.choices)
+      ? (q.options || q.alternativas || q.choices)
+      : ['Opção A', 'Opção B', 'Opção C', 'Opção D'],
+    correctIndex: typeof q.correctIndex === 'number' ? q.correctIndex : (typeof q.correta === 'number' ? q.correta : 0),
+    explanation: q.explanation || q.explicacao || q.justificativa || 'Justificativa do gabarito.',
+  }));
+
+  // 5. Glossário
+  const rawGlossary = raw.glossary || raw.glossario || raw.termos || [];
+  const glossary = rawGlossary.map((g: any) => ({
+    term: g.term || g.termo || g.palavra || 'Termo',
+    definition: g.definition || g.definicao || g.significado || '',
+  }));
+
+  return {
+    title,
+    subject,
+    summary,
+    bulletSummary,
+    segments: allSegments,
+    keyTopics,
+    examAlerts,
+    flashcards,
+    quiz,
+    glossary,
+  };
 }
 
 /**
@@ -295,9 +349,9 @@ export async function transcribeWithGroq(
     });
   }
 
-  onProgress?.(3, 'Gerando resumo completo cronológico, flashcards e simulado...');
+  onProgress?.(3, 'Gerando resumo completo, flashcards 3D e simulado com IA...');
 
-  // Estruturação didática com LLM em ~2 segundos
+  // Estruturação didática com LLM em ~2 segundos com 4096 tokens de limite
   const prompt = `${ACADEMIC_PROMPT}\n\nDisciplina sugerida: "${subject || 'Geral'}".\n\nTRANSCRIÇÃO COMPLETA DA AULA:\n"""\n${completeTranscript.substring(0, 60000)}\n"""`;
 
   const llmRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -311,6 +365,7 @@ export async function transcribeWithGroq(
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       temperature: 0.2,
+      max_completion_tokens: 4096,
     }),
   });
 
@@ -321,9 +376,9 @@ export async function transcribeWithGroq(
 
   const llmData = await llmRes.json();
   const rawJson = llmData.choices?.[0]?.message?.content || '{}';
-  const studyKit = JSON.parse(rawJson);
+  const rawParsed = JSON.parse(rawJson);
 
-  studyKit.segments = allSegments;
+  const studyKit = normalizeStudyKit(rawParsed, allSegments);
   onProgress?.(4, 'Concluído com sucesso!');
   return studyKit;
 }

@@ -99,19 +99,22 @@ export default function Home() {
       bulletSummary: data.bulletSummary || '',
       keyTopics: data.keyTopics || [],
       examAlerts: data.examAlerts || [],
-      flashcards: data.flashcards?.map((f, idx) => ({
+      flashcards: (data.flashcards && data.flashcards.length > 0 ? data.flashcards : (data.keyTopics || []).map((t, idx) => ({
+        question: `O que é ou como funciona "${t.title}" segundo a aula?`,
+        answer: t.explanation,
+      }))).map((f: any, idx) => ({
         id: `fc_${idx}`,
-        question: f.question,
-        answer: f.answer,
+        question: f.question || f.pergunta || f.front || '',
+        answer: f.answer || f.resposta || f.back || '',
         mastered: false,
-      })) || [],
-      quiz: data.quiz?.map((q, idx) => ({
+      })),
+      quiz: (data.quiz || []).map((q: any, idx) => ({
         id: `quiz_${idx}`,
-        question: q.question,
-        options: q.options || [],
+        question: q.question || q.pergunta || q.enunciado || '',
+        options: q.options || q.alternativas || [],
         correctIndex: q.correctIndex ?? 0,
-        explanation: q.explanation || '',
-      })) || [],
+        explanation: q.explanation || q.explicacao || '',
+      })),
       glossary: data.glossary || [],
     };
 
