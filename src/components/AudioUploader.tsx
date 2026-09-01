@@ -123,41 +123,56 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel, o
   /**
    * Upload direto para a Google Files API com progresso em porcentagem
    */
-  const uploadDirectToGoogle = (file: File, uploadUrl: string): Promise<any> => {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', uploadUrl, true);
-      xhr.setRequestHeader('Content-Length', file.size.toString());
-      xhr.setRequestHeader('X-Goog-Upload-Offset', '0');
-      xhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize');
+  const uploadDirectToGoogle = async (file: File, uploadUrl: string): Promise<any> => {
+    try {
+      return await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', uploadUrl, true);
+        xhr.setRequestHeader('X-Goog-Upload-Offset', '0');
+        xhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize');
 
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percent = Math.round((event.loaded / event.total) * 100);
-          setUploadPercent(percent);
-          setStatusMessage(`Enviando áudio para nuvem: ${percent}%`);
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const res = JSON.parse(xhr.responseText);
-            resolve(res);
-          } catch (e) {
-            reject(new Error('Resposta inválida do servidor de arquivos.'));
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            setUploadPercent(percent);
+            setStatusMessage(`Enviando áudio para nuvem: ${percent}%`);
           }
-        } else {
-          reject(new Error(`Falha no upload do áudio (Status ${xhr.status}).`));
-        }
-      };
+        };
 
-      xhr.onerror = () => {
-        reject(new Error('Erro de conexão ao enviar áudio.'));
-      };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const res = JSON.parse(xhr.responseText);
+              resolve(res);
+            } catch (e) {
+              reject(new Error('Resposta inválida do servidor de arquivos.'));
+            }
+          } else {
+            reject(new Error(`Falha no upload do áudio (Status ${xhr.status}).`));
+          }
+        };
 
-      xhr.send(file);
-    });
+        xhr.onerror = () => {
+          reject(new Error('Erro de conexão ao enviar áudio.'));
+        };
+
+        xhr.send(file);
+      });
+    } catch (xhrErr) {
+      console.warn('XHR upload falhou, tentando fallback com fetch...', xhrErr);
+      const res = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'X-Goog-Upload-Offset': '0',
+          'X-Goog-Upload-Command': 'upload, finalize',
+        },
+        body: file,
+      });
+      if (!res.ok) {
+        throw new Error(`Falha no envio de áudio para o Google (Status ${res.status}).`);
+      }
+      return await res.json();
+    }
   };
 
   // Envio e Processamento com IA
