@@ -97,6 +97,87 @@ Siga rigorosamente a seguinte estrutura:
 }
 `;
 
+/**
+ * Processa a transcrição e material de estudos a partir de um File URI pré-carregado no Google Files API.
+ * Ideal para arquivos de qualquer tamanho (50MB, 100MB, 500MB+) sem passar pelo limite da Vercel.
+ */
+export async function processFileUriWithGemini(
+  fileUri: string,
+  fileName?: string,
+  mimeType: string = 'audio/mp3',
+  customApiKey?: string,
+  modelName: string = 'gemini-3.6-flash'
+): Promise<TranscriptionResponse> {
+  const ai = getGeminiClient(customApiKey);
+
+  const candidateModels = [
+    'gemini-3.6-flash',
+    'gemini-3.7-flash',
+    modelName
+  ].filter((v, i, a) => a.indexOf(v) === i);
+
+  let lastError: any = null;
+  let responseText = '';
+
+  for (const currentModel of candidateModels) {
+    try {
+      console.log(`[Gemini] Processando fileUri com modelo: ${currentModel}...`);
+      const response = await ai.models.generateContent({
+        model: currentModel,
+        contents: [
+          {
+            fileData: {
+              fileUri: fileUri,
+              mimeType: mimeType || 'audio/mp3',
+            },
+          },
+          ACADEMIC_PROMPT,
+        ],
+        config: {
+          temperature: 0.2,
+          responseMimeType: 'application/json',
+        },
+      });
+
+      responseText = response.text || '';
+      if (responseText) {
+        console.log(`[Gemini] Transcrição concluída via ${currentModel}!`);
+        break;
+      }
+    } catch (modelErr: any) {
+      console.warn(`[Gemini] Modelo ${currentModel} falhou (${modelErr.message}). Tentando fallback...`);
+      lastError = modelErr;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
+  // Limpeza na nuvem (Google Files API)
+  if (fileName) {
+    try {
+      await ai.files.delete({ name: fileName });
+      console.log(`[Gemini] Arquivo remoto ${fileName} excluído.`);
+    } catch (delErr) {
+      console.warn('Aviso: Erro ao excluir arquivo remoto:', delErr);
+    }
+  }
+
+  if (!responseText) {
+    throw lastError || new Error('Nenhum dos modelos disponíveis respondeu.');
+  }
+
+  let cleanJson = responseText.trim();
+  if (cleanJson.startsWith('```json')) {
+    cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (cleanJson.startsWith('```')) {
+    cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
+
+  return JSON.parse(cleanJson);
+}
+
+/**
+ * Processa a partir de um Buffer em memória (útil para desenvolvimento local ou áudios gravados direto no mic).
+ */
 export async function processAudioWithGemini(
   audioBuffer: Buffer,
   mimeType: string,
@@ -105,7 +186,6 @@ export async function processAudioWithGemini(
 ): Promise<TranscriptionResponse> {
   const ai = getGeminiClient(customApiKey);
   
-  // Cria arquivo temporário para upload via Files API do Gemini
   const tempDir = os.tmpdir();
   const ext = mimeType.includes('mp4') || mimeType.includes('m4a') ? '.m4a' :
               mimeType.includes('mpeg') || mimeType.includes('mp3') ? '.mp3' :
@@ -120,7 +200,6 @@ export async function processAudioWithGemini(
   try {
     await fs.writeFile(tempFilePath, audioBuffer);
     
-    // Upload para a Files API do Google GenAI
     uploadedFile = await ai.files.upload({
       file: tempFilePath,
       config: {
@@ -128,84 +207,18 @@ export async function processAudioWithGemini(
       },
     });
 
-    console.log(`[Gemini] Áudio enviado com sucesso para Google Files API. ID: ${uploadedFile.name}`);
+    console.log(`[Gemini] Áudio local enviado para Google Files API. ID: ${uploadedFile.name}`);
 
-    // Modelos ativos suportados com fallback
-    const candidateModels = [
-      'gemini-3.6-flash',
-      'gemini-3.7-flash',
+    return await processFileUriWithGemini(
+      uploadedFile.uri || '',
+      uploadedFile.name,
+      uploadedFile.mimeType || mimeType,
+      customApiKey,
       modelName
-    ].filter((v, i, a) => a.indexOf(v) === i);
-
-    let lastError: any = null;
-    let responseText = '';
-
-    for (const currentModel of candidateModels) {
-      try {
-        console.log(`[Gemini] Processando com modelo: ${currentModel}...`);
-        const response = await ai.models.generateContent({
-          model: currentModel,
-          contents: [
-            {
-              fileData: {
-                fileUri: uploadedFile.uri || '',
-                mimeType: uploadedFile.mimeType || mimeType,
-              },
-            },
-            ACADEMIC_PROMPT,
-          ],
-          config: {
-            temperature: 0.2,
-            responseMimeType: 'application/json',
-          },
-        });
-
-        responseText = response.text || '';
-        if (responseText) {
-          console.log(`[Gemini] Processamento concluído com sucesso via ${currentModel}!`);
-          break;
-        }
-      } catch (modelErr: any) {
-        console.warn(`[Gemini] Modelo ${currentModel} falhou (${modelErr.message}). Tentando fallback...`);
-        lastError = modelErr;
-        // Pequena pausa antes de tentar o próximo se for 503
-        await new Promise((r) => setTimeout(r, 1000));
-      }
-    }
-
-    if (!responseText) {
-      throw lastError || new Error('Nenhum dos modelos disponíveis respondeu no momento.');
-    }
-    
-    // Tratamento para extrair JSON caso haja marcação ```json
-    let cleanJson = responseText.trim();
-    if (cleanJson.startsWith('```json')) {
-      cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (cleanJson.startsWith('```')) {
-      cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-
-    const parsed: TranscriptionResponse = JSON.parse(cleanJson);
-    return parsed;
-  } catch (error: any) {
-    console.error('[Gemini] Erro final no processamento do áudio:', error);
-    throw new Error(error.message || 'Falha ao processar e transcrever a gravação da aula.');
+    );
   } finally {
-    // Limpeza de arquivos temporários locais
     try {
       await fs.unlink(tempFilePath);
-    } catch {
-      // Ignora
-    }
-    
-    // Limpeza na nuvem (Google Files API)
-    if (uploadedFile?.name) {
-      try {
-        await ai.files.delete({ name: uploadedFile.name });
-        console.log(`[Gemini] Arquivo temporário ${uploadedFile.name} excluído da nuvem.`);
-      } catch (delErr) {
-        console.warn('Aviso: Não foi possível excluir arquivo temporário da nuvem:', delErr);
-      }
-    }
+    } catch {}
   }
 }

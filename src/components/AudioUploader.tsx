@@ -15,6 +15,8 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel }:
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [subject, setSubject] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [uploadPercent, setUploadPercent] = useState<number>(0);
+  const [statusMessage, setStatusMessage] = useState<string>('');
   const [progressStep, setProgressStep] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -27,14 +29,13 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel }:
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const steps = [
-    'Carregando gravação da aula...',
-    'Conectando ao Gemini 3.7 Flash...',
+    'Enviando gravação de aula (Upload Direto)...',
+    'Conectando ao Gemini Flash...',
     'Transcrevendo com timestamps e termos técnicos...',
     'Sintetizando resumo, tópicos de prova e flashcards...',
     'Pronto! Criando material de estudos...'
   ];
 
-  // Tratamento de Arquivo
   const handleFileSelect = (file: File) => {
     if (!file) return;
     setErrorMsg(null);
@@ -118,6 +119,46 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel }:
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  /**
+   * Upload direto para a Google Files API com progresso em porcentagem
+   */
+  const uploadDirectToGoogle = (file: File, uploadUrl: string): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', uploadUrl, true);
+      xhr.setRequestHeader('Content-Length', file.size.toString());
+      xhr.setRequestHeader('X-Goog-Upload-Offset', '0');
+      xhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize');
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          setUploadPercent(percent);
+          setStatusMessage(`Enviando áudio para nuvem: ${percent}%`);
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const res = JSON.parse(xhr.responseText);
+            resolve(res);
+          } catch (e) {
+            reject(new Error('Resposta inválida do servidor de arquivos.'));
+          }
+        } else {
+          reject(new Error(`Falha no upload do áudio (Status ${xhr.status}).`));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('Erro de conexão ao enviar áudio.'));
+      };
+
+      xhr.send(file);
+    });
+  };
+
   // Envio e Processamento com IA
   const handleSubmit = async () => {
     if (!selectedFile) {
@@ -127,43 +168,76 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel }:
 
     setIsLoading(true);
     setProgressStep(0);
+    setUploadPercent(0);
+    setStatusMessage('Iniciando sessão de upload...');
     setErrorMsg(null);
 
-    // Simulação progressiva visual de etapas enquanto aguarda
-    const interval = setInterval(() => {
-      setProgressStep((prev) => (prev < 3 ? prev + 1 : prev));
-    }, 4500);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (apiKey) {
+      headers['x-gemini-api-key'] = apiKey;
+    }
+    if (selectedModel) {
+      headers['x-gemini-model'] = selectedModel;
+    }
 
     try {
-      const formData = new FormData();
-      formData.append('audio', selectedFile);
-      if (subject) {
-        formData.append('subject', subject);
-      }
-
-      const headers: Record<string, string> = {};
-      if (apiKey) {
-        headers['x-gemini-api-key'] = apiKey;
-      }
-      if (selectedModel) {
-        headers['x-gemini-model'] = selectedModel;
-      }
-
-      const response = await fetch('/api/transcribe', {
+      // 1. Obtém sessão de upload direto para contornar o limite de 4.5MB da Vercel
+      const sessionRes = await fetch('/api/upload-session', {
         method: 'POST',
         headers,
-        body: formData,
+        body: JSON.stringify({
+          displayName: selectedFile.name,
+          mimeType: selectedFile.type || 'audio/mp3',
+          numBytes: selectedFile.size,
+        }),
+      });
+
+      if (!sessionRes.ok) {
+        const err = await sessionRes.json();
+        throw new Error(err.error || 'Erro ao iniciar upload de áudio.');
+      }
+
+      const { uploadUrl } = await sessionRes.json();
+
+      // 2. Upload direto do áudio para o Google Cloud (suporta até 2GB)
+      const uploadResult = await uploadDirectToGoogle(selectedFile, uploadUrl);
+      const googleFile = uploadResult.file;
+
+      if (!googleFile || !googleFile.uri) {
+        throw new Error('Arquivo não processado pelo Google.');
+      }
+
+      // 3. Solicita a transcrição e geração de estudos via File URI
+      setProgressStep(2);
+      setStatusMessage('Transcrevendo e gerando material de estudo...');
+
+      const interval = setInterval(() => {
+        setProgressStep((prev) => (prev < 3 ? prev + 1 : prev));
+      }, 5000);
+
+      const transcribeRes = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          fileUri: googleFile.uri,
+          fileName: googleFile.name,
+          mimeType: googleFile.mimeType || selectedFile.type || 'audio/mp3',
+          subject: subject,
+        }),
       });
 
       clearInterval(interval);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao processar áudio no servidor.');
+      if (!transcribeRes.ok) {
+        const errorData = await transcribeRes.json();
+        throw new Error(errorData.error || 'Erro ao transcrever áudio.');
       }
 
-      const result = await response.json();
+      const result = await transcribeRes.json();
       setProgressStep(4);
+      setStatusMessage('Pronto!');
 
       setTimeout(() => {
         onTranscriptionSuccess(
@@ -173,9 +247,8 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel }:
         );
       }, 800);
     } catch (err: any) {
-      clearInterval(interval);
       console.error('Erro na transcrição:', err);
-      setErrorMsg(err.message || 'Falha ao transcrever aula. Verifique sua conexão ou tente novamente.');
+      setErrorMsg(err.message || 'Falha ao processar a gravação. Verifique sua conexão ou tente novamente.');
       setIsLoading(false);
     }
   };
@@ -352,7 +425,7 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel }:
             </button>
           </div>
         ) : (
-          /* Estado de Carregamento com Etapas */
+          /* Estado de Carregamento com Barra de Progresso Real */
           <div className="py-8 px-4 text-center space-y-6">
             <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
               <div className="absolute inset-0 rounded-full border-4 border-blue-200 dark:border-blue-900 animate-pulse" />
@@ -361,12 +434,27 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel }:
 
             <div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                Processando Aula com Gemini 3.7 Flash
+                {statusMessage || 'Processando Aula com IA'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Isso pode levar de 20 a 60 segundos dependendo da duração do áudio.
+                Suporta gravações de até 3 a 5 horas sem limites de tamanho.
               </p>
             </div>
+
+            {/* Barra de Progresso em Porcentagem para Upload */}
+            {uploadPercent > 0 && uploadPercent < 100 && (
+              <div className="max-w-md mx-auto space-y-1.5">
+                <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadPercent}%` }}
+                  />
+                </div>
+                <p className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 text-right">
+                  {uploadPercent}%
+                </p>
+              </div>
+            )}
 
             {/* Lista de Etapas */}
             <div className="max-w-md mx-auto space-y-2.5 text-left">
