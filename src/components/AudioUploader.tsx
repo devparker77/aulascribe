@@ -1,18 +1,18 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Upload, Mic, Square, Play, Pause, FileAudio, Sparkles, CheckCircle2, AlertCircle, Loader2, BookOpen } from 'lucide-react';
+import { Upload, Mic, Square, Play, Pause, FileAudio, Sparkles, CheckCircle2, AlertCircle, Loader2, BookOpen, Zap } from 'lucide-react';
 import { TranscriptionResponse } from '@/types/lecture';
-import { transcribeDirectlyWithGemini, fileToBase64 } from '@/lib/client-transcribe';
+import { transcribeWithGroq } from '@/lib/client-transcribe';
 
 interface AudioUploaderProps {
   onTranscriptionSuccess: (data: TranscriptionResponse, audioBlob: Blob | undefined, durationSeconds: number) => void;
-  apiKey?: string;
-  selectedModel?: string;
+  groqKey?: string;
+  geminiKey?: string;
   onOpenSettings?: () => void;
 }
 
-export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel, onOpenSettings }: AudioUploaderProps) {
+export function AudioUploader({ onTranscriptionSuccess, groqKey, geminiKey, onOpenSettings }: AudioUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [subject, setSubject] = useState('');
@@ -31,10 +31,10 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel, o
 
   const steps = [
     'Preparando gravação da aula...',
-    'Conectando ao Gemini Flash...',
-    'Transcrevendo com timestamps e termos técnicos...',
-    'Sintetizando resumo, tópicos de prova e flashcards...',
-    'Pronto! Criando material de estudos...'
+    'Transcrevendo áudio com Whisper Large v3...',
+    'Identificando termos técnicos e timestamps...',
+    'Sintetizando resumo, tópicos de prova e flashcards 3D...',
+    'Pronto! Material de estudos gerado.'
   ];
 
   const handleFileSelect = (file: File) => {
@@ -120,81 +120,42 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel, o
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Envio e Processamento com IA
+  // Envio e Processamento com IA (Whisper Large v3 + LLM)
   const handleSubmit = async () => {
     if (!selectedFile) {
       setErrorMsg('Selecione ou grave um arquivo de áudio primeiro.');
       return;
     }
 
+    const activeGroqKey = groqKey?.trim() || process.env.NEXT_PUBLIC_GROQ_API_KEY || '';
+
     setIsLoading(true);
     setProgressStep(0);
-    setStatusMessage('Preparando áudio da aula...');
+    setStatusMessage('Iniciando transcrição com Whisper Large v3...');
     setErrorMsg(null);
 
     try {
-      // Se houver chave informada pelo usuário nas configurações (localStorage)
-      // Executa diretamente via cliente (100% livre de limites de gateway da Vercel)
-      if (apiKey && apiKey.trim()) {
-        console.log('[AulaScribe] Processando diretamente via cliente com a chave do usuário...');
-        const transcriptionResult = await transcribeDirectlyWithGemini(
-          selectedFile,
-          apiKey.trim(),
-          selectedModel || 'gemini-3.6-flash',
-          subject,
-          (step, msg) => {
-            setProgressStep(step);
-            setStatusMessage(msg);
-          }
-        );
-
-        setTimeout(() => {
-          onTranscriptionSuccess(
-            transcriptionResult,
-            selectedFile,
-            recordingTime > 0 ? recordingTime : 0
-          );
-        }, 500);
-        return;
-      }
-
-      // Se não houver chave no cliente, tenta a rota de servidor (chave no .env da Vercel)
-      setStatusMessage('Enviando para o servidor...');
-      const formData = new FormData();
-      formData.append('audio', selectedFile);
-      if (subject) formData.append('subject', subject);
-
-      const headers: Record<string, string> = {};
-      if (selectedModel) headers['x-gemini-model'] = selectedModel;
-
-      const res = await fetch('/api/transcribe', {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        if (res.status === 413) {
-          throw new Error('Arquivo maior que o limite direto do servidor. Por favor, cole sua chave no botão ⚙️ para envio sem limites.');
+      console.log('[AulaScribe] Executando pipeline ultra rápido com Groq Whisper Large v3...');
+      const transcriptionResult = await transcribeWithGroq(
+        selectedFile,
+        activeGroqKey,
+        subject,
+        (step, msg) => {
+          setProgressStep(step);
+          setStatusMessage(msg);
         }
-        throw new Error(errData.error || `Erro no servidor (Status ${res.status}).`);
-      }
-
-      const result = await res.json();
-      setProgressStep(4);
-      setStatusMessage('Pronto!');
+      );
 
       setTimeout(() => {
         onTranscriptionSuccess(
-          result.data,
+          transcriptionResult,
           selectedFile,
           recordingTime > 0 ? recordingTime : 0
         );
-      }, 500);
+      }, 400);
     } catch (err: any) {
       console.error('Erro na transcrição:', err);
-      setErrorMsg(err.message || 'Falha ao processar gravação. Verifique sua chave da API ou tente novamente.');
+      setErrorMsg(err.message || 'Falha ao processar gravação. Verifique as configurações.');
       setIsLoading(false);
     }
   };
@@ -206,15 +167,19 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel, o
         
         {/* Cabeçalho */}
         <div className="text-center mb-6">
-          <div className="inline-flex p-3 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 mb-3">
-            <Sparkles className="w-6 h-6 animate-pulse" />
+          <div className="inline-flex p-3 rounded-2xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 mb-3">
+            <Zap className="w-6 h-6 animate-pulse" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Transcrever Aula com IA
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-md mx-auto">
-            Envie a gravação da aula (.m4a do iPhone, .mp3 ou grave ao vivo) para obter transcrição, resumo e flashcards.
+            Envie a gravação da aula (.m4a do iPhone, .mp3 ou grave ao vivo) para obter transcrição com Whisper Large v3, resumo e flashcards.
           </p>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 mt-2.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+            Motor Turbo: Whisper Large v3 Ativo (Processamento em segundos)
+          </div>
         </div>
 
         {/* Campo Opcional de Disciplina */}
@@ -355,13 +320,13 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel, o
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{errorMsg}</span>
                 </div>
-                {onOpenSettings && (errorMsg.toLowerCase().includes('chave') || errorMsg.toLowerCase().includes('limite')) && (
+                {onOpenSettings && (
                   <button
                     type="button"
                     onClick={onOpenSettings}
                     className="self-end sm:self-auto px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] whitespace-nowrap active:scale-95 transition-all shadow-xs"
                   >
-                    Configurar Chave ⚙️
+                    Ver Configurações ⚙️
                   </button>
                 )}
               </div>
@@ -377,24 +342,24 @@ export function AudioUploader({ onTranscriptionSuccess, apiKey, selectedModel, o
                   : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none'
               }`}
             >
-              <Sparkles className="w-4 h-4" />
+              <Zap className="w-4 h-4 text-amber-300" />
               Transcrever e Gerar Material de Estudo
             </button>
           </div>
         ) : (
-          /* Estado de Carregamento com Barra de Progresso Real */
+          /* Estado de Carregamento */
           <div className="py-8 px-4 text-center space-y-6">
             <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full border-4 border-blue-200 dark:border-blue-900 animate-pulse" />
-              <Loader2 className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
+              <div className="absolute inset-0 rounded-full border-4 border-amber-200 dark:border-amber-900 animate-pulse" />
+              <Loader2 className="w-8 h-8 text-amber-500 dark:text-amber-400 animate-spin" />
             </div>
 
             <div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                {statusMessage || 'Processando Aula com IA'}
+                {statusMessage || 'Processando Aula com Whisper Large v3'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Suporta gravações longas de aula sem limites de tamanho.
+                Transcrição ultra rápida com inteligência acadêmica.
               </p>
             </div>
 

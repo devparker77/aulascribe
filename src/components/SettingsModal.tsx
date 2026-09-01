@@ -1,32 +1,34 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Key, Sparkles, ExternalLink, Check, Trash2, ShieldCheck, Cpu } from 'lucide-react';
+import { X, Key, Sparkles, ExternalLink, Check, Trash2, ShieldCheck, Zap } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  apiKey: string;
-  onSaveApiKey: (key: string) => void;
-  selectedModel: string;
-  onSelectModel: (model: string) => void;
+  groqKey: string;
+  onSaveGroqKey: (key: string) => void;
+  geminiKey: string;
+  onSaveGeminiKey: (key: string) => void;
   onClearAllData: () => void;
 }
 
 export function SettingsModal({
   isOpen,
   onClose,
-  apiKey,
-  onSaveApiKey,
-  selectedModel,
-  onSelectModel,
+  groqKey,
+  onSaveGroqKey,
+  geminiKey,
+  onSaveGeminiKey,
   onClearAllData,
 }: SettingsModalProps) {
-  const [tempKey, setTempKey] = useState(apiKey);
+  const [tempGroqKey, setTempGroqKey] = useState(groqKey || '');
+  const [tempGeminiKey, setTempGeminiKey] = useState(geminiKey || '');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const handleSave = () => {
-    onSaveApiKey(tempKey.trim());
+    onSaveGroqKey(tempGroqKey.trim());
+    onSaveGeminiKey(tempGeminiKey.trim());
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
@@ -44,11 +46,11 @@ export function SettingsModal({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-              <Key className="w-5 h-5" />
+              <Zap className="w-5 h-5 text-amber-500" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900 dark:text-white">Configurações & Chave IA</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Acesso ilimitado e gratuito ao Gemini 3.7 Flash</p>
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">Motores de IA & Chaves</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Whisper Large v3 (Ultra Rápido) & Gemini</p>
             </div>
           </div>
           <button
@@ -59,63 +61,52 @@ export function SettingsModal({
           </button>
         </div>
 
-        {/* Modelo de IA Selecionado */}
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-            <Cpu className="w-3.5 h-3.5 text-blue-500" />
-            Modelo Gemini Utilizado:
+        {/* Chave Groq (Principal - Whisper) */}
+        <div className="space-y-2 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+          <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5 text-amber-500" />
+            Chave Groq (Whisper Large v3 - Transcrição em &lt; 1s):
           </label>
-          <select
-            value={selectedModel}
-            onChange={(e) => onSelectModel(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="gemini-3.7-flash">Gemini 3.7 Flash (Mais recente, alta precisão & multimodal)</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Rápido)</option>
-            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-          </select>
-        </div>
-
-        {/* Campo de Chave de API */}
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <Key className="w-3.5 h-3.5 text-blue-500" />
-              Chave de API do Google Gemini (Opcional se já estiver no servidor):
-            </span>
-          </label>
-
           <input
             type="password"
-            placeholder="AIzaSy..."
-            value={tempKey}
-            onChange={(e) => setTempKey(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="gsk_..."
+            value={tempGroqKey}
+            onChange={(e) => setTempGroqKey(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Gratuita em <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-blue-500 underline inline-flex items-center gap-0.5">console.groq.com <ExternalLink className="w-2.5 h-2.5" /></a> (Processamento instantâneo de áudio).
+          </p>
+        </div>
 
-          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-xs text-slate-600 dark:text-slate-300 space-y-1.5">
-            <div className="flex items-center gap-1.5 font-bold text-blue-600 dark:text-blue-400">
-              <ShieldCheck className="w-4 h-4" />
-              <span>Como obter uma chave 100% gratuita em 1 minuto:</span>
-            </div>
-            <ol className="list-decimal list-inside space-y-1 pl-1 text-[11px] text-slate-500 dark:text-slate-400">
-              <li>Acesse o <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 underline font-semibold inline-flex items-center gap-0.5">Google AI Studio <ExternalLink className="w-2.5 h-2.5" /></a> com sua conta Google.</li>
-              <li>Clique no botão azul <strong>"Create API Key"</strong>.</li>
-              <li>Copie o código gerado e cole no campo acima!</li>
-            </ol>
-          </div>
+        {/* Chave Gemini */}
+        <div className="space-y-2 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+          <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+            Chave Google Gemini:
+          </label>
+          <input
+            type="password"
+            placeholder="AQ.Ab8..."
+            value={tempGeminiKey}
+            onChange={(e) => setTempGeminiKey(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Gratuita em <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-500 underline inline-flex items-center gap-0.5">Google AI Studio <ExternalLink className="w-2.5 h-2.5" /></a>.
+          </p>
         </div>
 
         {/* Botão de Salvar */}
-        <div className="pt-2 flex gap-2">
+        <div className="pt-2">
           <button
             onClick={handleSave}
-            className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md shadow-blue-600/20"
+            className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md shadow-blue-600/20"
           >
             {savedSuccess ? (
               <>
                 <Check className="w-4 h-4 text-emerald-300" />
-                Configurações Salvas!
+                Chaves Salvas no Aparelho!
               </>
             ) : (
               'Salvar Configurações'
@@ -125,10 +116,10 @@ export function SettingsModal({
 
         {/* Zona de Limpeza */}
         <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs">
-          <span className="text-slate-400">Dados salvos no seu navegador:</span>
+          <span className="text-slate-400">Dados do histórico local:</span>
           <button
             onClick={() => {
-              if (confirm('Deseja apagar todas as aulas e transcrições salvas localmente?')) {
+              if (confirm('Deseja apagar todas as aulas salvas localmente?')) {
                 onClearAllData();
                 onClose();
               }

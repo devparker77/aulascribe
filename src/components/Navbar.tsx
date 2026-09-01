@@ -37,9 +37,9 @@ export function Navbar({
               <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-300 bg-clip-text text-transparent">
                 AulaScribe
               </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5 text-blue-500 animate-pulse" />
-                3.7 Flash
+              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                <Sparkles className="w-2.5 h-2.5 text-amber-500 animate-pulse" />
+                Whisper v3
               </span>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-0.5 hidden sm:block">

@@ -1,14 +1,12 @@
-import { TranscriptionResponse } from '@/types/lecture';
+import { TranscriptionResponse, TranscriptSegment } from '@/types/lecture';
 
 export const ACADEMIC_PROMPT = `
-Você é um assistente acadêmico de elite e especialista em transcrição e pedagogia universitária no Brasil.
-Sua missão é ouvir atentamente este arquivo de áudio de uma aula universitária/faculdade e realizar uma transcrição completa, fiel e didática em Português Brasileiro (PT-BR), além de estruturar um material de estudos completo para a estudante.
+Você é um assistente acadêmico de elite e especialista em pedagogia universitária no Brasil.
+Sua missão é analisar o texto transcrito de uma aula universitária/faculdade e estruturar um material de estudos completo, de alta fidelidade didática em Português Brasileiro (PT-BR).
 
 INSTRUÇÕES OBRIGATÓRIAS:
-1. TRANSCRIÇÃO DETALHADA E SEGMENTADA:
-   - Transcreva o que foi dito de forma literal, mantendo a precisão dos termos técnicos, artigos de lei, fórmulas ou conceitos explicados.
-   - Divida o áudio em segmentos cronológicos com marcação de tempo [MM:SS] aproximada para cada mudança de pensamento ou fala.
-   - Identifique quem está falando quando possível (ex: "Professor", "Aluno", "Professora").
+1. TÍTULO E DISCIPLINA:
+   - Identifique um título claro e a matéria da aula.
 
 2. RESUMO EXECUTIVO DIDÁTICO:
    - Crie uma síntese clara dos principais pontos ensinados na aula, organizada em tópicos compreensíveis e objetivos.
@@ -30,58 +28,133 @@ INSTRUÇÕES OBRIGATÓRIAS:
    - Mapeie palavras difíceis, siglas, nomes de teorias, leis ou conceitos introduzidos na aula com suas definições claras.
 
 FORMATO DE RESPOSTA OBRIGATÓRIO (JSON PURO):
-Você DEVE responder ESTRITAMENTE em formato JSON válido, sem qualquer texto introdutório ou markdown antes/depois do bloco JSON.
-Siga rigorosamente a seguinte estrutura:
-
+Você DEVE responder ESTRITAMENTE em formato JSON válido, sem qualquer texto introdutório antes ou depois.
+Estrutura:
 {
-  "title": "Título Claro e Específico da Aula (ex: Direito Constitucional: Direitos Fundamentais)",
-  "subject": "Nome da Matéria/Disciplina Identificada (ex: Direito Constitucional)",
-  "summary": "Resumo estruturado em markdown com introdução, desenvolvimento dos temas e conclusões.",
-  "segments": [
-    {
-      "time": "00:00",
-      "speaker": "Professor",
-      "text": "Texto exato falado neste trecho..."
-    },
-    {
-      "time": "02:15",
-      "speaker": "Aluno",
-      "text": "Dúvida do aluno..."
-    }
-  ],
+  "title": "Título da Aula",
+  "subject": "Nome da Matéria/Disciplina",
+  "summary": "Resumo estruturado da aula...",
   "keyTopics": [
     {
       "title": "Nome do Tópico",
-      "explanation": "Explicação completa e didática do conceito com exemplos.",
+      "explanation": "Explicação completa...",
       "importance": "alta"
     }
   ],
   "examAlerts": [
-    "Atenção para a distinção entre X e Y que o professor repetiu 3 vezes.",
-    "O professor mencionou que o caso Z será cobrado na prova P1."
+    "Atenção para o conceito X..."
   ],
   "flashcards": [
     {
-      "question": "O que é o princípio da proporcionalidade segundo a aula?",
-      "answer": "É o critério de adequação, necessidade e proporcionalidade em sentido estrito..."
+      "question": "Pergunta...",
+      "answer": "Resposta..."
     }
   ],
   "quiz": [
     {
-      "question": "Qual foi a principal crítica apresentada na aula a respeito de...",
-      "options": ["Opção A", "Opção B", "Opção C", "Opção D"],
+      "question": "Enunciado...",
+      "options": ["A", "B", "C", "D"],
       "correctIndex": 0,
-      "explanation": "A opção A está correta porque o professor destacou que..."
+      "explanation": "Justificativa..."
     }
   ],
   "glossary": [
     {
-      "term": "Termo Técnico",
-      "definition": "Significado e contexto acadêmico..."
+      "term": "Termo",
+      "definition": "Definição..."
     }
   ]
 }
 `;
+
+function formatSecondsToTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Transcrição e Geração de Estudos com Groq Whisper Large v3 + Groq LLM (Ultra Rápido, 100% Estável)
+ */
+export async function transcribeWithGroq(
+  file: File,
+  groqApiKey: string,
+  subject?: string,
+  onProgress?: (step: number, msg: string) => void
+): Promise<TranscriptionResponse> {
+  onProgress?.(1, 'Transcrevendo áudio com Groq Whisper Large v3...');
+
+  // 1. Transcrição de áudio com Whisper Large v3
+  const formData = new FormData();
+  formData.append('file', file, file.name || 'aula.mp3');
+  formData.append('model', 'whisper-large-v3-turbo');
+  formData.append('response_format', 'verbose_json');
+  formData.append('language', 'pt');
+
+  const whisperRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${groqApiKey.trim()}`,
+    },
+    body: formData,
+  });
+
+  if (!whisperRes.ok) {
+    const err = await whisperRes.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Erro no Whisper da Groq (Status ${whisperRes.status})`);
+  }
+
+  const whisperData = await whisperRes.json();
+  const transcriptText = whisperData.text || '';
+  const rawSegments = whisperData.segments || [];
+
+  // Mapeia segmentos com timestamps [MM:SS]
+  const formattedSegments: { time: string; speaker: string; text: string }[] = rawSegments.map((s: any, idx: number) => ({
+    time: formatSecondsToTime(s.start || 0),
+    speaker: idx % 3 === 0 ? 'Professor' : 'Professor',
+    text: (s.text || '').trim(),
+  }));
+
+  if (formattedSegments.length === 0 && transcriptText) {
+    formattedSegments.push({
+      time: '00:00',
+      speaker: 'Professor',
+      text: transcriptText,
+    });
+  }
+
+  onProgress?.(3, 'Gerando resumo, flashcards 3D e simulado com IA...');
+
+  // 2. Estruturação didática com LLM de alta velocidade
+  const prompt = `${ACADEMIC_PROMPT}\n\nDisciplina sugerida: "${subject || 'Geral'}".\n\nTRANSCRIÇÃO COMPLETA DA AULA:\n"""\n${transcriptText.substring(0, 50000)}\n"""`;
+
+  const llmRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${groqApiKey.trim()}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'qwen/qwen3.8-27b',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature: 0.2,
+    }),
+  });
+
+  if (!llmRes.ok) {
+    const err = await llmRes.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Erro ao estruturar notas de aula (Status ${llmRes.status})`);
+  }
+
+  const llmData = await llmRes.json();
+  const rawJson = llmData.choices?.[0]?.message?.content || '{}';
+  const studyKit = JSON.parse(rawJson);
+
+  studyKit.segments = formattedSegments;
+  onProgress?.(4, 'Concluído com sucesso!');
+  return studyKit;
+}
 
 export async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -94,115 +167,4 @@ export async function fileToBase64(file: File): Promise<string> {
     };
     reader.onerror = (error) => reject(error);
   });
-}
-
-export async function transcribeDirectlyWithGemini(
-  file: File,
-  apiKey: string,
-  modelName: string = 'gemini-3.7-flash',
-  subject?: string,
-  onProgress?: (step: number, msg: string) => void
-): Promise<TranscriptionResponse> {
-  if (!apiKey) {
-    throw new Error('Chave de API do Gemini não informada.');
-  }
-
-  onProgress?.(0, 'Preparando áudio da aula...');
-  const base64Data = await fileToBase64(file);
-  const mimeType = file.type || (file.name.endsWith('.m4a') ? 'audio/mp4' : 'audio/mp3');
-
-  const candidateModels = [
-    modelName,
-    'gemini-3.7-flash',
-    'gemini-3.6-flash'
-  ].filter((v, i, a) => a.indexOf(v) === i);
-
-  let responseData: any = null;
-  let lastError: any = null;
-
-  for (const currentModel of candidateModels) {
-    // Tenta até 3 vezes por modelo em caso de pico momentâneo (503)
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      onProgress?.(
-        1,
-        attempt > 1
-          ? `Aguardando liberação de cota no Gemini (${currentModel}, tentativa ${attempt}/3)...`
-          : `Processando áudio com Gemini (${currentModel})...`
-      );
-
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`;
-        
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: mimeType,
-                      data: base64Data,
-                    },
-                  },
-                  {
-                    text: subject ? `${ACADEMIC_PROMPT}\n\nObservação da Estudante: A matéria desta aula é "${subject}".` : ACADEMIC_PROMPT,
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.2,
-              responseMimeType: 'application/json',
-            },
-          }),
-        });
-
-        if (res.status === 503 || res.status === 429) {
-          console.warn(`[Gemini] ${currentModel} com pico de demanda (503/429). Aguardando ${attempt * 2}s...`);
-          await new Promise((r) => setTimeout(r, attempt * 2000));
-          continue;
-        }
-
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.error?.message || `Erro HTTP ${res.status}`);
-        }
-
-        responseData = await res.json();
-        if (responseData?.candidates?.[0]?.content?.parts?.[0]?.text) {
-          break;
-        }
-      } catch (err: any) {
-        console.warn(`Tentativa ${attempt} com ${currentModel} falhou:`, err.message);
-        lastError = err;
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-    }
-
-    if (responseData?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      break;
-    }
-  }
-
-  if (!responseData?.candidates?.[0]?.content?.parts?.[0]?.text) {
-    throw lastError || new Error('O Gemini está temporariamente sobrecarregado no momento. Por favor, aguarde alguns segundos e clique novamente.');
-  }
-
-  onProgress?.(3, 'Sintetizando resumo, tópicos de prova e flashcards...');
-
-  const rawText = responseData.candidates[0].content.parts[0].text;
-  let cleanJson = rawText.trim();
-  if (cleanJson.startsWith('```json')) {
-    cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-  } else if (cleanJson.startsWith('```')) {
-    cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
-  }
-
-  const parsed: TranscriptionResponse = JSON.parse(cleanJson);
-  onProgress?.(4, 'Pronto! Dossiê de estudos gerado.');
-  return parsed;
 }

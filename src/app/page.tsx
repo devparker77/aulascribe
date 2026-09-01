@@ -10,26 +10,29 @@ import { IOSGuideModal } from '@/components/IOSGuideModal';
 import { Lecture, TranscriptionResponse } from '@/types/lecture';
 import { getAllLectures, saveLecture, deleteLecture, updateFlashcardMastery, db } from '@/lib/db';
 
+const DEFAULT_GROQ_KEY = process.env.NEXT_PUBLIC_GROQ_API_KEY || '';
+const DEFAULT_GEMINI_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+
 export default function Home() {
   const [activeLecture, setActiveLecture] = useState<Lecture | null>(null);
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
-  const [apiKey, setApiKey] = useState('');
-  const [selectedModel, setSelectedModel] = useState('gemini-3.7-flash');
+  const [groqKey, setGroqKey] = useState(DEFAULT_GROQ_KEY);
+  const [geminiKey, setGeminiKey] = useState(DEFAULT_GEMINI_KEY);
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
   const [isMounted, setIsMounted] = useState(false);
 
   // Carrega preferências do usuário e histórico do IndexedDB
   useEffect(() => {
     setIsMounted(true);
-    const savedKey = localStorage.getItem('aulascribe_api_key') || '';
-    const savedModel = localStorage.getItem('aulascribe_model') || 'gemini-3.7-flash';
+    const savedGroqKey = localStorage.getItem('aulascribe_groq_key') || DEFAULT_GROQ_KEY;
+    const savedGeminiKey = localStorage.getItem('aulascribe_gemini_key') || DEFAULT_GEMINI_KEY;
     const savedTheme = (localStorage.getItem('aulascribe_theme') as 'dark' | 'light') || 'light';
     
-    setApiKey(savedKey);
-    setSelectedModel(savedModel);
+    setGroqKey(savedGroqKey);
+    setGeminiKey(savedGeminiKey);
     setTheme(savedTheme);
 
     if (savedTheme === 'dark') {
@@ -62,14 +65,14 @@ export default function Home() {
     }
   };
 
-  const handleSaveApiKey = (key: string) => {
-    setApiKey(key);
-    localStorage.setItem('aulascribe_api_key', key);
+  const handleSaveGroqKey = (key: string) => {
+    setGroqKey(key);
+    localStorage.setItem('aulascribe_groq_key', key);
   };
 
-  const handleSelectModel = (model: string) => {
-    setSelectedModel(model);
-    localStorage.setItem('aulascribe_model', model);
+  const handleSaveGeminiKey = (key: string) => {
+    setGeminiKey(key);
+    localStorage.setItem('aulascribe_gemini_key', key);
   };
 
   const handleTranscriptionSuccess = async (
@@ -105,11 +108,10 @@ export default function Home() {
         id: `quiz_${idx}`,
         question: q.question,
         options: q.options || [],
-        correctIndex: q.correctIndex || 0,
+        correctIndex: q.correctIndex ?? 0,
         explanation: q.explanation || '',
       })) || [],
       glossary: data.glossary || [],
-      modelUsed: selectedModel,
     };
 
     try {
@@ -117,7 +119,7 @@ export default function Home() {
       await loadHistory();
       setActiveLecture(newLecture);
     } catch (err) {
-      console.error('Erro ao salvar aula no banco local:', err);
+      console.error('Erro ao salvar aula no histórico:', err);
       setActiveLecture(newLecture);
     }
   };
@@ -125,12 +127,12 @@ export default function Home() {
   const handleDeleteLecture = async (id: string) => {
     try {
       await deleteLecture(id);
-      await loadHistory();
       if (activeLecture?.id === id) {
         setActiveLecture(null);
       }
+      await loadHistory();
     } catch (err) {
-      console.error('Erro ao excluir aula:', err);
+      console.error('Erro ao deletar aula:', err);
     }
   };
 
@@ -187,14 +189,14 @@ export default function Home() {
             onBack={() => setActiveLecture(null)}
             onDelete={handleDeleteLecture}
             onUpdateFlashcardMastery={handleUpdateMastery}
-            apiKey={apiKey}
+            apiKey={geminiKey}
           />
         ) : (
           <div className="py-6 sm:py-10">
             <AudioUploader
               onTranscriptionSuccess={handleTranscriptionSuccess}
-              apiKey={apiKey}
-              selectedModel={selectedModel}
+              groqKey={groqKey}
+              geminiKey={geminiKey}
               onOpenSettings={() => setIsSettingsOpen(true)}
             />
           </div>
@@ -215,10 +217,10 @@ export default function Home() {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        apiKey={apiKey}
-        onSaveApiKey={handleSaveApiKey}
-        selectedModel={selectedModel}
-        onSelectModel={handleSelectModel}
+        groqKey={groqKey}
+        onSaveGroqKey={handleSaveGroqKey}
+        geminiKey={geminiKey}
+        onSaveGeminiKey={handleSaveGeminiKey}
         onClearAllData={handleClearAllData}
       />
 
