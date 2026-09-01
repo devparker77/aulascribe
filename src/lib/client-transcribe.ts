@@ -74,7 +74,128 @@ function formatSecondsToTime(seconds: number): string {
 }
 
 /**
- * Transcrição e Geração de Estudos com Groq Whisper Large v3 + Groq LLM (Ultra Rápido, 100% Estável)
+ * Converte Float32Array para formato WAV padrão (16-bit PCM Mono)
+ */
+function encodeWav(samples: Float32Array, sampleRate = 16000): Blob {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  function writeString(offset: number, string: string) {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  }
+
+  // Header RIFF
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(8, 'WAVE');
+
+  // Sub-chunk FMT (16-bit Mono PCM)
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // Linear PCM
+  view.setUint16(22, 1, true); // 1 Canal (Mono)
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // Byte rate (16000 * 2)
+  view.setUint16(32, 2, true); // Block align
+  view.setUint16(34, 16, true); // Bits per sample
+
+  // Sub-chunk DATA
+  writeString(36, 'data');
+  view.setUint32(40, samples.length * 2, true);
+
+  // Amostras PCM
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+/**
+ * Decodifica qualquer arquivo de áudio (.mp3, .m4a, .wav) no navegador,
+ * converte para 16kHz Mono e divide em chunks seguros de 10 minutos (<=19MB).
+ */
+async function splitAudioIntoWavChunks(
+  file: File,
+  maxChunkMinutes = 10,
+  onProgress?: (msg: string) => void
+): Promise<{ blob: Blob; startSecond: number; durationSeconds: number }[]> {
+  onProgress?.('Otimizando áudio para processamento instantâneo...');
+
+  const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioCtx) {
+    // Fallback caso navegador antigo não suporte Web Audio
+    return [{ blob: file, startSecond: 0, durationSeconds: 0 }];
+  }
+
+  const audioCtx = new AudioCtx();
+  const arrayBuffer = await file.arrayBuffer();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+  const targetSampleRate = 16000;
+  const numChannels = audioBuffer.numberOfChannels;
+  const originalSampleRate = audioBuffer.sampleRate;
+  const totalDuration = audioBuffer.duration;
+
+  // 1. Mistura canais para Mono
+  const monoSamples = new Float32Array(audioBuffer.length);
+  for (let c = 0; c < numChannels; c++) {
+    const channelData = audioBuffer.getChannelData(c);
+    for (let i = 0; i < audioBuffer.length; i++) {
+      monoSamples[i] += channelData[i] / numChannels;
+    }
+  }
+
+  // 2. Reamostragem para 16,000 Hz
+  let resampledSamples: Float32Array;
+  if (originalSampleRate === targetSampleRate) {
+    resampledSamples = monoSamples;
+  } else {
+    const ratio = originalSampleRate / targetSampleRate;
+    const newLength = Math.round(monoSamples.length / ratio);
+    resampledSamples = new Float32Array(newLength);
+    for (let i = 0; i < newLength; i++) {
+      const origIndex = Math.round(i * ratio);
+      resampledSamples[i] = monoSamples[origIndex] || 0;
+    }
+  }
+
+  // 3. Fatiamento em partes de até maxChunkMinutes (10 minutos = 9.600.000 amostras = 19.2MB)
+  const samplesPerChunk = targetSampleRate * 60 * maxChunkMinutes;
+  const chunks: { blob: Blob; startSecond: number; durationSeconds: number }[] = [];
+
+  const totalChunks = Math.ceil(resampledSamples.length / samplesPerChunk);
+
+  for (let c = 0; c < totalChunks; c++) {
+    const start = c * samplesPerChunk;
+    const end = Math.min(start + samplesPerChunk, resampledSamples.length);
+    const chunkSamples = resampledSamples.subarray(start, end);
+    const chunkBlob = encodeWav(chunkSamples, targetSampleRate);
+    const startSecond = (start / targetSampleRate);
+    const durationSeconds = (end - start) / targetSampleRate;
+
+    chunks.push({
+      blob: chunkBlob,
+      startSecond,
+      durationSeconds,
+    });
+  }
+
+  try {
+    await audioCtx.close();
+  } catch (e) {
+    // Ignora erro ao fechar contexto
+  }
+
+  return chunks;
+}
+
+/**
+ * Transcrição e Geração de Estudos com Groq Whisper Large v3 + Groq LLM (Suporte a gravações de qualquer tamanho)
  */
 export async function transcribeWithGroq(
   file: File,
@@ -82,56 +203,90 @@ export async function transcribeWithGroq(
   subject?: string,
   onProgress?: (step: number, msg: string) => void
 ): Promise<TranscriptionResponse> {
-  onProgress?.(1, 'Transcrevendo áudio com Groq Whisper Large v3...');
-
-  // 1. Transcrição de áudio com Whisper Large v3
-  const formData = new FormData();
-  formData.append('file', file, file.name || 'aula.mp3');
-  formData.append('model', 'whisper-large-v3-turbo');
-  formData.append('response_format', 'verbose_json');
-  formData.append('language', 'pt');
-
-  const whisperRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${groqApiKey.trim()}`,
-    },
-    body: formData,
-  });
-
-  if (!whisperRes.ok) {
-    const err = await whisperRes.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Erro no Whisper da Groq (Status ${whisperRes.status})`);
+  const activeKey = groqApiKey.trim();
+  if (!activeKey) {
+    throw new Error('Chave de API do Groq não configurada.');
   }
 
-  const whisperData = await whisperRes.json();
-  const transcriptText = whisperData.text || '';
-  const rawSegments = whisperData.segments || [];
+  let audioChunks: { blob: Blob; startSecond: number; durationSeconds: number }[] = [];
 
-  // Mapeia segmentos com timestamps [MM:SS]
-  const formattedSegments: { time: string; speaker: string; text: string }[] = rawSegments.map((s: any, idx: number) => ({
-    time: formatSecondsToTime(s.start || 0),
-    speaker: idx % 3 === 0 ? 'Professor' : 'Professor',
-    text: (s.text || '').trim(),
-  }));
+  // Se o arquivo for maior que 24MB, fatiamos via Web Audio API em partes seguras de 10 min
+  if (file.size > 24 * 1024 * 1024) {
+    onProgress?.(0, `Dividindo aula de ${(file.size / (1024 * 1024)).toFixed(1)}MB em partes otimizadas...`);
+    try {
+      audioChunks = await splitAudioIntoWavChunks(file, 10, (msg) => onProgress?.(0, msg));
+    } catch (e) {
+      console.warn('Falha no fatiador WebAudio, enviando arquivo diretamente:', e);
+      audioChunks = [{ blob: file, startSecond: 0, durationSeconds: 0 }];
+    }
+  } else {
+    audioChunks = [{ blob: file, startSecond: 0, durationSeconds: 0 }];
+  }
 
-  if (formattedSegments.length === 0 && transcriptText) {
-    formattedSegments.push({
+  const allSegments: { time: string; speaker: string; text: string }[] = [];
+  const fullTranscriptTexts: string[] = [];
+
+  // Transcreve cada parte com Whisper Large v3
+  for (let i = 0; i < audioChunks.length; i++) {
+    const chunk = audioChunks[i];
+    const chunkLabel = audioChunks.length > 1 ? ` (Parte ${i + 1}/${audioChunks.length})` : '';
+    onProgress?.(1, `Transcrevendo áudio com Whisper Large v3${chunkLabel}...`);
+
+    const formData = new FormData();
+    formData.append('file', chunk.blob, `aula_part_${i}.wav`);
+    formData.append('model', 'whisper-large-v3-turbo');
+    formData.append('response_format', 'verbose_json');
+    formData.append('language', 'pt');
+
+    const whisperRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${activeKey}`,
+      },
+      body: formData,
+    });
+
+    if (!whisperRes.ok) {
+      const err = await whisperRes.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Erro no Whisper da Groq (Status ${whisperRes.status})`);
+    }
+
+    const whisperData = await whisperRes.json();
+    const chunkText = (whisperData.text || '').trim();
+    if (chunkText) {
+      fullTranscriptTexts.push(chunkText);
+    }
+
+    const rawSegments = whisperData.segments || [];
+    for (const s of rawSegments) {
+      const absoluteSeconds = chunk.startSecond + (s.start || 0);
+      allSegments.push({
+        time: formatSecondsToTime(absoluteSeconds),
+        speaker: 'Professor',
+        text: (s.text || '').trim(),
+      });
+    }
+  }
+
+  const completeTranscript = fullTranscriptTexts.join('\n\n');
+
+  if (allSegments.length === 0 && completeTranscript) {
+    allSegments.push({
       time: '00:00',
       speaker: 'Professor',
-      text: transcriptText,
+      text: completeTranscript,
     });
   }
 
-  onProgress?.(3, 'Gerando resumo, flashcards 3D e simulado com IA...');
+  onProgress?.(3, 'Gerando resumo executivo, flashcards 3D e simulado com IA...');
 
-  // 2. Estruturação didática com LLM de alta velocidade
-  const prompt = `${ACADEMIC_PROMPT}\n\nDisciplina sugerida: "${subject || 'Geral'}".\n\nTRANSCRIÇÃO COMPLETA DA AULA:\n"""\n${transcriptText.substring(0, 50000)}\n"""`;
+  // Estruturação didática com LLM em ~2 segundos
+  const prompt = `${ACADEMIC_PROMPT}\n\nDisciplina sugerida: "${subject || 'Geral'}".\n\nTRANSCRIÇÃO COMPLETA DA AULA:\n"""\n${completeTranscript.substring(0, 60000)}\n"""`;
 
   const llmRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${groqApiKey.trim()}`,
+      'Authorization': `Bearer ${activeKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -151,20 +306,7 @@ export async function transcribeWithGroq(
   const rawJson = llmData.choices?.[0]?.message?.content || '{}';
   const studyKit = JSON.parse(rawJson);
 
-  studyKit.segments = formattedSegments;
+  studyKit.segments = allSegments;
   onProgress?.(4, 'Concluído com sucesso!');
   return studyKit;
-}
-
-export async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64Data = result.split(',')[1];
-      resolve(base64Data);
-    };
-    reader.onerror = (error) => reject(error);
-  });
 }
